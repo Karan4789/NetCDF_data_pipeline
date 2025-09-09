@@ -16,8 +16,8 @@ def main():
         # Initialize pipeline
         pipeline = ArgoETLPipeline()
         
-        # Run the pipeline with a small batch for testing
-        results = pipeline.run_pipeline(max_files=3)
+        # Run the pipeline
+        results = pipeline.run_pipeline()
         
         # Get database statistics
         db_stats = pipeline.get_database_stats()

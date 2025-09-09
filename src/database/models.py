@@ -3,10 +3,11 @@ Database models for ARGO NetCDF data using SQLAlchemy ORM
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, UniqueConstraint, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from pgvector.sqlalchemy import Vector
 
 Base = declarative_base()
 
@@ -43,6 +44,7 @@ class ArgoProfile(Base):
     temperature_values = Column(String)  # JSON string of temperature array
     salinity_values = Column(String)  # JSON string of salinity array
     num_measurements = Column(Integer)
+    embedding = Column(Vector(768))  # Gemini embedding vector
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship
