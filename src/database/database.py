@@ -88,7 +88,7 @@ class DatabaseManager:
                     ).first()
                     
                     if not existing_profile:
-                        # Create profile record (embedding will be added later)
+
                         profile = ArgoProfile(
                             float_id=argo_float.id,
                             cycle_number=data['cycle_number'],
@@ -99,7 +99,6 @@ class DatabaseManager:
                             temperature_values=str(data['temperature']),
                             salinity_values=str(data['salinity']),
                             num_measurements=data['num_measurements'],
-                            embedding=data.get('embedding')  # Include embedding if available
                         )
                         
                         session.add(profile)
@@ -135,37 +134,15 @@ class DatabaseManager:
             logger.error(f"Error getting profile count: {str(e)}")
             return 0
     
-    def get_profiles_without_embeddings(self, limit: int = 10) -> List[ArgoProfile]:
-        """Get profiles that don't have embeddings yet"""
-        try:
-            with self.get_session() as session:
-                profiles = session.query(ArgoProfile).filter(
-                    ArgoProfile.embedding.is_(None)
-                ).limit(limit).all()
-                return profiles
-        except Exception as e:
-            logger.error(f"Error getting profiles without embeddings: {str(e)}")
-            return []
-    
-    def update_profile_embedding(self, profile_id: str, embedding: List[float]) -> bool:
-        """Update a profile with its embedding"""
-        try:
-            with self.get_session() as session:
-                profile = session.query(ArgoProfile).filter(
-                    ArgoProfile.id == profile_id
-                ).first()
-                
-                if profile:
-                    profile.embedding = embedding
-                    session.commit()
-                    logger.debug(f"Updated embedding for profile {profile_id}")
-                    return True
-                else:
-                    logger.warning(f"Profile {profile_id} not found")
-                    return False
-                    
-        except Exception as e:
-            logger.error(f"Error updating profile embedding: {str(e)}")
-            if 'session' in locals():
-                session.rollback()
-            return False
+    def get_database_stats(self):
+        """
+        Return number of floats and profiles in the database.
+        """
+        with self.get_session() as session:
+            from .models import ArgoFloat, ArgoProfile
+            float_count = session.query(ArgoFloat).count()
+            profile_count = session.query(ArgoProfile).count()
+            return {
+                "floats": float_count,
+                "profiles": profile_count
+            }

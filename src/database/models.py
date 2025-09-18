@@ -44,7 +44,6 @@ class ArgoProfile(Base):
     temperature_values = Column(String)  # JSON string of temperature array
     salinity_values = Column(String)  # JSON string of salinity array
     num_measurements = Column(Integer)
-    embedding = Column(Vector(768))  # Gemini embedding vector
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationship
