@@ -6,7 +6,8 @@ import ftplib
 import tempfile
 import logging
 import sys
-from typing import List
+import json
+from typing import List, Dict, Tuple
 
 # Add config to path
 config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config')
@@ -22,7 +23,33 @@ class FTPDownloader:
     def __init__(self, ftp_host: str = None, ftp_path: str = None):
         self.ftp_host = ftp_host or Config.FTP_HOST
         self.ftp_path = ftp_path or Config.FTP_PATH
+        self.cursor_file = os.path.join(os.path.dirname(__file__), '..', '..', 'ftp_cursor.json')
         
+    def _load_cursor(self) -> Dict:
+        """Load the cursor that tracks processing progress"""
+        if os.path.exists(self.cursor_file):
+            try:
+                with open(self.cursor_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Error loading cursor file: {str(e)}. Starting fresh.")
+                
+        return {
+            "float_index": 0,
+            "last_float": "",
+            "last_file": "",
+            "dirs_processed": 0,
+            "files_processed": 0
+        }
+        
+    def _save_cursor(self, cursor: Dict):
+        """Save the processing cursor"""
+        try:
+            with open(self.cursor_file, 'w') as f:
+                json.dump(cursor, f)
+        except Exception as e:
+            logger.error(f"Error saving cursor file: {str(e)}")
+            
     def fetch_files(self, max_files: int = None) -> List[str]:
         """
         Connect to FTP server and download NetCDF files
@@ -39,6 +66,10 @@ class FTPDownloader:
         downloaded_files = []
         temp_dir = tempfile.mkdtemp(prefix=Config.TEMP_DIR_PREFIX)
         
+        # Load cursor to continue from where we left off
+        cursor = self._load_cursor()
+        float_index = cursor["float_index"]
+        
         try:
             logger.info(f"Connecting to FTP server: {self.ftp_host}")
             with ftplib.FTP(self.ftp_host) as ftp:
@@ -50,8 +81,16 @@ class FTPDownloader:
                 ftp.retrlines('NLST', float_dirs.append)
                 logger.info(f"Found {len(float_dirs)} float directories")
                 
+                if float_index >= len(float_dirs):
+                    logger.info("All float directories processed, resetting to start")
+                    float_index = 0
+                
                 files_downloaded = 0
-                for float_dir in float_dirs[:3]:  # Limit to first 3 float directories
+                processed_float_count = 0
+                
+                # Start from the last processed float directory
+                for i in range(float_index, min(float_index + 3, len(float_dirs))):
+                    float_dir = float_dirs[i]
                     if files_downloaded >= max_files:
                         break
                         
@@ -60,8 +99,18 @@ class FTPDownloader:
                         nc_files = []
                         ftp.retrlines('NLST', nc_files.append)
                         
-                        # Download .nc files from this directory
-                        for nc_file in nc_files:
+                        # If this is the last float we processed, find where we left off
+                        start_idx = 0
+                        if float_dir == cursor["last_float"]:
+                            try:
+                                last_file_idx = nc_files.index(cursor["last_file"])
+                                start_idx = last_file_idx + 1
+                            except ValueError:
+                                # Last file not found, start from beginning
+                                start_idx = 0
+                        
+                        # Download .nc files from this directory, starting from where we left off
+                        for nc_file in nc_files[start_idx:]:
                             if files_downloaded >= max_files:
                                 break
                             if nc_file.endswith('.nc'):
@@ -72,14 +121,26 @@ class FTPDownloader:
                                 
                                 downloaded_files.append(local_path)
                                 files_downloaded += 1
+                                cursor["last_float"] = float_dir
+                                cursor["last_file"] = nc_file
                                 logger.info(f"Downloaded: {nc_file} ({files_downloaded}/{max_files})")
                                 
+                        processed_float_count += 1
+                        
                     except ftplib.error_perm as e:
                         logger.warning(f"Permission error accessing {float_dir}: {str(e)}")
+                        processed_float_count += 1
                         continue
                     except Exception as e:
                         logger.error(f"Error processing {float_dir}: {str(e)}")
+                        processed_float_count += 1
                         continue
+                
+                # Update cursor for next run
+                cursor["float_index"] = (float_index + processed_float_count) % len(float_dirs)
+                cursor["dirs_processed"] += processed_float_count
+                cursor["files_processed"] += files_downloaded
+                self._save_cursor(cursor)
                         
         except Exception as e:
             logger.error(f"Error connecting to FTP server: {str(e)}")

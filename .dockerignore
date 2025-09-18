@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+.env
+argo_etl.log
+uv.lock
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
